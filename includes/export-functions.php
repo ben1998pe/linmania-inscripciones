@@ -10,10 +10,13 @@ if (!defined('ABSPATH')) {
 class LinmaniaExport {
     
     public static function export_to_excel($data, $filename = 'inscripciones') {
-        // Set headers for Excel download
-        header('Content-Type: application/vnd.ms-excel');
+        // Set headers for Excel download with proper encoding
+        header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
         header('Content-Disposition: attachment; filename="' . $filename . '_' . date('Y-m-d') . '.xls"');
         header('Cache-Control: max-age=0');
+        
+        // Add BOM for UTF-8 to ensure proper encoding in Excel
+        echo "\xEF\xBB\xBF";
         
         // Start output
         echo '<table border="1">';
@@ -36,20 +39,20 @@ class LinmaniaExport {
         
         foreach ($data as $inscription) {
             echo '<tr>';
-            echo '<td>' . esc_html($inscription['ID']) . '</td>';
-            echo '<td>' . esc_html($inscription['date']) . '</td>';
-            echo '<td>' . esc_html($inscription['categoria']) . '</td>';
-            echo '<td>' . esc_html($inscription['local']) . '</td>';
-            echo '<td>' . esc_html($inscription['equipo']) . '</td>';
-            echo '<td>' . esc_html($inscription['jugador1']) . '</td>';
-            echo '<td>' . esc_html($inscription['telefono1']) . '</td>';
-            echo '<td>' . esc_html($inscription['jugador2']) . '</td>';
-            echo '<td>' . esc_html($inscription['telefono2']) . '</td>';
-            echo '<td>' . esc_html($inscription['jugador3']) . '</td>';
-            echo '<td>' . esc_html($inscription['telefono3']) . '</td>';
-            echo '<td>' . esc_html($inscription['jugador4']) . '</td>';
-            echo '<td>' . esc_html($inscription['telefono4']) . '</td>';
-            echo '<td>' . esc_html($inscription['suplentes']) . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['ID'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['date'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['categoria'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['local'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['equipo'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['jugador1'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['telefono1'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['jugador2'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['telefono2'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['jugador3'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['telefono3'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['jugador4'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['telefono4'], ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($inscription['suplentes'], ENT_QUOTES, 'UTF-8') . '</td>';
             echo '</tr>';
         }
         
@@ -58,42 +61,103 @@ class LinmaniaExport {
     }
     
     public static function export_to_pdf($data, $filename = 'inscripciones') {
-        // Simple PDF generation using HTML to PDF conversion
+        // Check if DomPDF is available
+        if (!class_exists('Dompdf\Dompdf')) {
+            wp_die('DomPDF no está disponible. Por favor, ejecuta "composer install" en el directorio del plugin.');
+        }
+        
+        // Generate HTML for PDF
         $html = self::generate_pdf_html($data);
         
-        // Set headers for PDF download
-        header('Content-Type: application/pdf');
-        header('Content-Disposition: attachment; filename="' . $filename . '_' . date('Y-m-d') . '.pdf"');
-        header('Cache-Control: max-age=0');
-        
-        // For now, we'll output HTML that can be printed as PDF
-        // In a production environment, you'd want to use a proper PDF library like TCPDF or mPDF
-        echo '<!DOCTYPE html>
+        // Create full HTML document
+        $full_html = '<!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
-            <title>Inscripciones - ' . date('Y-m-d') . '</title>
+            <title>Reporte de Inscripciones - ' . date('Y-m-d') . '</title>
             <style>
-                body { font-family: Arial, sans-serif; font-size: 12px; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                th { background-color: #f2f2f2; font-weight: bold; }
-                .header { text-align: center; margin-bottom: 20px; }
-                .footer { margin-top: 20px; font-size: 10px; color: #666; }
+                body { 
+                    font-family: Arial, sans-serif; 
+                    font-size: 10px; 
+                    margin: 15px;
+                    line-height: 1.3;
+                }
+                .header { 
+                    text-align: center; 
+                    margin-bottom: 25px; 
+                    border-bottom: 2px solid #333;
+                    padding-bottom: 10px;
+                }
+                .header h1 { 
+                    margin: 0; 
+                    font-size: 20px; 
+                    color: #333;
+                }
+                .header p { 
+                    margin: 3px 0 0 0; 
+                    font-size: 10px; 
+                    color: #666;
+                }
+                table { 
+                    width: 100%; 
+                    border-collapse: collapse; 
+                    margin-top: 15px;
+                    font-size: 8px;
+                }
+                th, td { 
+                    border: 1px solid #333; 
+                    padding: 4px 3px; 
+                    text-align: left; 
+                    vertical-align: top;
+                }
+                th { 
+                    background-color: #f5f5f5; 
+                    font-weight: bold; 
+                    font-size: 8px;
+                }
+                .footer { 
+                    margin-top: 20px; 
+                    font-size: 8px; 
+                    color: #666;
+                    text-align: center;
+                    border-top: 1px solid #ccc;
+                    padding-top: 8px;
+                }
             </style>
         </head>
         <body>
             <div class="header">
                 <h1>Reporte de Inscripciones</h1>
                 <p>Generado el: ' . date('d/m/Y H:i:s') . '</p>
+                <p>Total de registros: ' . count($data) . '</p>
             </div>
+            
             ' . $html . '
+            
             <div class="footer">
                 <p>Linmania Blog e Inscripciones - Desarrollado por Benjamin Oscco Arias</p>
+                <p>Página generada el ' . date('d/m/Y H:i:s') . '</p>
             </div>
         </body>
         </html>';
         
+        // Create DomPDF instance
+        $dompdf = new \Dompdf\Dompdf();
+        $dompdf->loadHtml($full_html);
+        
+        // Set paper size and orientation
+        $dompdf->setPaper('A4', 'landscape');
+        
+        // Render the HTML as PDF
+        $dompdf->render();
+        
+        // Set headers for PDF download
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $filename . '_' . date('Y-m-d') . '.pdf"');
+        header('Cache-Control: max-age=0');
+        
+        // Output the generated PDF
+        echo $dompdf->output();
         exit;
     }
     
@@ -118,20 +182,20 @@ class LinmaniaExport {
         
         foreach ($data as $inscription) {
             $html .= '<tr>';
-            $html .= '<td>' . esc_html($inscription['ID']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['date']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['categoria']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['local']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['equipo']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['jugador1']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['telefono1']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['jugador2']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['telefono2']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['jugador3']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['telefono3']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['jugador4']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['telefono4']) . '</td>';
-            $html .= '<td>' . esc_html($inscription['suplentes']) . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['ID'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['date'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['categoria'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['local'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['equipo'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['jugador1'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['telefono1'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['jugador2'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['telefono2'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['jugador3'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['telefono3'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['jugador4'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['telefono4'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $html .= '<td>' . htmlspecialchars($inscription['suplentes'], ENT_QUOTES, 'UTF-8') . '</td>';
             $html .= '</tr>';
         }
         
@@ -141,52 +205,13 @@ class LinmaniaExport {
     
     public static function get_inscriptions_data($filters = array()) {
         $args = array(
-            'post_type' => 'shop_order',
-            'post_status' => array('wc-completed', 'wc-processing', 'wc-pending'),
+            'post_type' => 'shop_order_placehold',
+            'post_status' => 'any',
             'posts_per_page' => -1, // Get all records for export
             'meta_query' => array()
         );
         
-        // Apply filters
-        if (!empty($filters['categoria'])) {
-            $args['meta_query'][] = array(
-                'key' => 'categoria_torneo',
-                'value' => $filters['categoria'],
-                'compare' => 'LIKE'
-            );
-        }
-        
-        if (!empty($filters['local'])) {
-            $args['meta_query'][] = array(
-                'key' => 'local_torneo',
-                'value' => $filters['local'],
-                'compare' => 'LIKE'
-            );
-        }
-        
-        if (!empty($filters['equipo'])) {
-            $args['meta_query'][] = array(
-                'key' => 'nombre_equipo',
-                'value' => $filters['equipo'],
-                'compare' => 'LIKE'
-            );
-        }
-        
-        if (!empty($filters['search'])) {
-            $args['meta_query'][] = array(
-                'relation' => 'OR',
-                array(
-                    'key' => 'nombre_equipo',
-                    'value' => $filters['search'],
-                    'compare' => 'LIKE'
-                ),
-                array(
-                    'key' => 'local_torneo',
-                    'value' => $filters['search'],
-                    'compare' => 'LIKE'
-                )
-            );
-        }
+        // No aplicar filtros aquí - se harán después de obtener los datos
         
         // Apply sorting
         if (!empty($filters['sort_by'])) {
@@ -227,6 +252,18 @@ class LinmaniaExport {
                 
                 if (!$order) continue;
                 
+                // Obtener fecha de forma segura
+                $date_created = $order->get_date_created();
+                $formatted_date = $date_created ? $date_created->date('d/m/Y h:i A') : 'N/A';
+                
+                // Obtener información del cliente si está disponible
+                $customer_name = '';
+                if ($order->get_billing_first_name() || $order->get_billing_last_name()) {
+                    $customer_name = trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
+                } elseif ($order->get_billing_company()) {
+                    $customer_name = $order->get_billing_company();
+                }
+                
                 // Obtener categorías del producto de la orden
                 $product_categories = array();
                 $items = $order->get_items();
@@ -243,24 +280,84 @@ class LinmaniaExport {
                 
                 $inscriptions[] = array(
                     'ID' => $order_id,
-                    'date' => $order->get_date_created()->date('d/m/Y h:i A'),
+                    'date' => $formatted_date,
                     'categoria' => $categoria,
-                    'local' => $order->get_meta('local'),
-                    'equipo' => $order->get_meta('nombre_equipo'),
-                    'jugador1' => $order->get_meta('nombre_jugador_1'),
-                    'jugador2' => $order->get_meta('nombre_jugador_2'),
-                    'jugador3' => $order->get_meta('nombre_jugador_3'),
-                    'jugador4' => $order->get_meta('nombre_jugador_4'),
-                    'telefono1' => $order->get_meta('telefono_jugador_1'),
-                    'telefono2' => $order->get_meta('telefono_jugador_2'),
-                    'telefono3' => $order->get_meta('telefono_jugador_3'),
-                    'telefono4' => $order->get_meta('telefono_jugador_4'),
-                    'suplentes' => $order->get_meta('suplentes')
+                    'local' => $order->get_meta('local') ?: 'Sin local',
+                    'equipo' => $order->get_meta('nombre_equipo') ?: ($customer_name ?: 'Sin equipo'),
+                    'jugador1' => $order->get_meta('nombre_jugador_1') ?: '',
+                    'jugador2' => $order->get_meta('nombre_jugador_2') ?: '',
+                    'jugador3' => $order->get_meta('nombre_jugador_3') ?: '',
+                    'jugador4' => $order->get_meta('nombre_jugador_4') ?: '',
+                    'telefono1' => $order->get_meta('telefono_jugador_1') ?: '',
+                    'telefono2' => $order->get_meta('telefono_jugador_2') ?: '',
+                    'telefono3' => $order->get_meta('telefono_jugador_3') ?: '',
+                    'telefono4' => $order->get_meta('telefono_jugador_4') ?: '',
+                    'suplentes' => $order->get_meta('suplentes') ?: ''
                 );
             }
         }
         
         wp_reset_postdata();
-        return $inscriptions;
+        
+        // Aplicar filtros después de obtener los datos (igual que en la tabla principal)
+        $filtered_inscriptions = $inscriptions;
+        
+        // Filtro de categoría
+        if (!empty($filters['categoria']) && $filters['categoria'] !== '' && $filters['categoria'] !== 'Nothing selected' && $filters['categoria'] !== 'Todas las categorías') {
+            $temp_filtered = array();
+            foreach ($filtered_inscriptions as $inscription) {
+                if (stripos($inscription['categoria'], $filters['categoria']) !== false) {
+                    $temp_filtered[] = $inscription;
+                }
+            }
+            $filtered_inscriptions = $temp_filtered;
+        }
+        
+        // Filtro de local
+        if (!empty($filters['local']) && $filters['local'] !== '' && $filters['local'] !== 'Nothing selected' && $filters['local'] !== 'Todos los locales') {
+            $temp_filtered = array();
+            foreach ($filtered_inscriptions as $inscription) {
+                if (stripos($inscription['local'], $filters['local']) !== false) {
+                    $temp_filtered[] = $inscription;
+                }
+            }
+            $filtered_inscriptions = $temp_filtered;
+        }
+        
+        // Búsqueda general en equipo, jugadores y suplentes
+        if (!empty($filters['search'])) {
+            $temp_filtered = array();
+            foreach ($filtered_inscriptions as $inscription) {
+                $search_found = false;
+                
+                // Buscar en nombre del equipo
+                if (stripos($inscription['equipo'], $filters['search']) !== false) {
+                    $search_found = true;
+                }
+                
+                // Buscar en nombres de jugadores
+                if (!$search_found) {
+                    for ($i = 1; $i <= 4; $i++) {
+                        $jugador_key = 'jugador' . $i;
+                        if (isset($inscription[$jugador_key]) && stripos($inscription[$jugador_key], $filters['search']) !== false) {
+                            $search_found = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Buscar en suplentes
+                if (!$search_found && stripos($inscription['suplentes'], $filters['search']) !== false) {
+                    $search_found = true;
+                }
+                
+                if ($search_found) {
+                    $temp_filtered[] = $inscription;
+                }
+            }
+            $filtered_inscriptions = $temp_filtered;
+        }
+        
+        return $filtered_inscriptions;
     }
 }

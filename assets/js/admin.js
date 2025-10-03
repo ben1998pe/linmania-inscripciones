@@ -8,8 +8,7 @@ jQuery(document).ready(function($) {
     let currentFilters = {
         search: '',
         categoria: '',
-        local: '',
-        equipo: ''
+        local: ''
     };
     
     // Initialize
@@ -17,7 +16,7 @@ jQuery(document).ready(function($) {
     loadFilterOptions();
     
     // Event listeners
-    $('#search-input').on('input', function() {
+    $('#general-search').on('input', function() {
         currentFilters.search = $(this).val();
         currentPage = 1;
         loadInscriptions();
@@ -35,11 +34,6 @@ jQuery(document).ready(function($) {
         loadInscriptions();
     });
     
-    $('#equipo-filter').on('change', function() {
-        currentFilters.equipo = $(this).val();
-        currentPage = 1;
-        loadInscriptions();
-    });
     
     $('#records-per-page').on('change', function() {
         perPage = parseInt($(this).val());
@@ -89,7 +83,6 @@ jQuery(document).ready(function($) {
             search: currentFilters.search,
             categoria: currentFilters.categoria,
             local: currentFilters.local,
-            equipo: currentFilters.equipo,
             sort_by: currentSort,
             sort_order: currentSortOrder
         };

@@ -20,6 +20,11 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Load Composer autoloader
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+
 // Define plugin constants
 define('LINMANIA_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('LINMANIA_PLUGIN_PATH', plugin_dir_path(__FILE__));
@@ -46,6 +51,7 @@ class LinmaniaBlogInscripciones {
     
     public function __construct() {
         add_action('init', array($this, 'init'));
+        add_action('init', array($this, 'create_custom_role'));
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('wp_ajax_linmania_get_inscriptions', array($this, 'ajax_get_inscriptions'));
@@ -56,6 +62,15 @@ class LinmaniaBlogInscripciones {
         // Test data actions removed - no longer needed
         add_action('wp_ajax_linmania_debug_database', array($this, 'debug_database'));
         add_action('wp_ajax_linmania_test_orders', array($this, 'test_orders_query'));
+        
+        // Force admin redirect for inscription managers
+        add_filter('login_redirect', array($this, 'force_admin_redirect'), 10, 3);
+        
+        // Allow admin access for inscription managers
+        add_filter('show_admin_bar', array($this, 'show_admin_bar_for_managers'));
+        
+        // Force admin access for inscription managers
+        add_action('admin_init', array($this, 'force_admin_access'));
     }
     
     public function init() {
@@ -63,11 +78,83 @@ class LinmaniaBlogInscripciones {
         load_plugin_textdomain('linmania-blog-inscripciones', false, dirname(plugin_basename(__FILE__)) . '/languages');
     }
     
+    public function create_custom_role() {
+        // Create custom role for inscription management with minimal admin access
+        $inscription_manager_caps = array(
+            'read' => true,
+            'linmania_manage_inscriptions' => true,
+            // Essential admin access permissions
+            'edit_posts' => true,
+            'edit_pages' => false,
+            'edit_others_posts' => false,
+            'edit_others_pages' => false,
+            'publish_posts' => false,
+            'publish_pages' => false,
+            'delete_posts' => false,
+            'delete_pages' => false,
+            'delete_others_posts' => false,
+            'delete_others_pages' => false,
+            'manage_categories' => false,
+            'manage_links' => false,
+            'moderate_comments' => false,
+            'upload_files' => false,
+            'edit_files' => false,
+            'edit_theme_options' => false,
+            'manage_options' => false,
+            'manage_plugins' => false,
+            'activate_plugins' => false,
+            'edit_plugins' => false,
+            'install_plugins' => false,
+            'update_plugins' => false,
+            'delete_plugins' => false,
+            'edit_themes' => false,
+            'install_themes' => false,
+            'update_themes' => false,
+            'delete_themes' => false,
+            'edit_users' => false,
+            'delete_users' => false,
+            'create_users' => false,
+            'list_users' => false,
+            'promote_users' => false,
+            'edit_others_users' => false,
+            'delete_others_users' => false,
+            // WooCommerce - minimal access
+            'manage_woocommerce' => false,
+            'view_woocommerce_reports' => false,
+            'edit_shop_orders' => false,
+            'delete_shop_orders' => false,
+            'edit_shop_coupons' => false,
+            'delete_shop_coupons' => false,
+            'edit_shop_webhooks' => false,
+            'delete_shop_webhooks' => false,
+            'manage_product_terms' => false,
+            'edit_product_terms' => false,
+            'delete_product_terms' => false,
+            'assign_product_terms' => false,
+            'edit_products' => false,
+            'delete_products' => false,
+            'publish_products' => false,
+            'edit_others_products' => false,
+            'delete_others_products' => false,
+            'read_private_products' => false,
+            'edit_private_products' => false,
+            'delete_private_products' => false,
+        );
+        
+        add_role('gestor_inscripciones', 'Gestor de Inscripciones', $inscription_manager_caps);
+        
+        // Add capability to administrators
+        $admin_role = get_role('administrator');
+        if ($admin_role) {
+            $admin_role->add_cap('linmania_manage_inscriptions');
+        }
+    }
+    
     public function add_admin_menu() {
         add_menu_page(
             'Inscripciones',
             'Inscripciones',
-            'manage_options',
+            'linmania_manage_inscriptions',
             'linmania-inscripciones',
             array($this, 'inscriptions_page'),
             'dashicons-groups',
@@ -112,10 +199,6 @@ class LinmaniaBlogInscripciones {
                     </select>
                 </div>
                 
-                <div class="filter-group">
-                    <label for="equipo-filter">EQUIPO:</label>
-                    <input type="text" id="equipo-filter" placeholder="EQUIPO">
-                </div>
                 
                 <div class="export-buttons">
                     <a href="#" id="export-excel" class="button">EXCEL</a>
@@ -137,7 +220,7 @@ class LinmaniaBlogInscripciones {
                 
                 <div class="search-control">
                     <label>Buscar:</label>
-                    <input type="text" id="general-search" placeholder="Buscar...">
+                    <input type="text" id="general-search" placeholder="Buscar por equipo, jugador o suplente...">
                 </div>
             </div>
             
@@ -191,12 +274,16 @@ class LinmaniaBlogInscripciones {
             wp_send_json_error('Nonce verification failed');
         }
         
+        // Check if user has permission
+        if (!current_user_can('linmania_manage_inscriptions')) {
+            wp_send_json_error('No tienes permisos para acceder a esta información');
+        }
+        
         $page = intval($_POST['page']) ?: 1;
         $per_page = intval($_POST['per_page']) ?: 25;
         $search = sanitize_text_field($_POST['search']) ?: '';
         $categoria = sanitize_text_field($_POST['categoria']) ?: '';
         $local = sanitize_text_field($_POST['local']) ?: '';
-        $equipo = sanitize_text_field($_POST['equipo']) ?: '';
         $sort_by = sanitize_text_field($_POST['sort_by']) ?: 'ID';
         $sort_order = sanitize_text_field($_POST['sort_order']) ?: 'DESC';
         
@@ -208,9 +295,6 @@ class LinmaniaBlogInscripciones {
         }
         if ($local === 'Nothing selected' || $local === '' || $local === 'Todos los locales') {
             $local = '';
-        }
-        if ($equipo === 'Nothing selected' || $equipo === '') {
-            $equipo = '';
         }
         
         
@@ -365,11 +449,35 @@ class LinmaniaBlogInscripciones {
             $filtered_inscriptions = $temp_filtered;
         }
         
-        // Filtro de equipo
-        if (!empty($equipo) && $equipo !== '' && $equipo !== 'Nothing selected') {
+        
+        // Búsqueda general en equipo, jugadores y suplentes
+        if (!empty($search)) {
             $temp_filtered = array();
             foreach ($filtered_inscriptions as $inscription) {
-                if (stripos($inscription['equipo'], $equipo) !== false) {
+                $search_found = false;
+                
+                // Buscar en nombre del equipo
+                if (stripos($inscription['equipo'], $search) !== false) {
+                    $search_found = true;
+                }
+                
+                // Buscar en nombres de jugadores
+                if (!$search_found) {
+                    for ($i = 1; $i <= 4; $i++) {
+                        $jugador_key = 'jugador' . $i;
+                        if (isset($inscription[$jugador_key]) && stripos($inscription[$jugador_key], $search) !== false) {
+                            $search_found = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Buscar en suplentes
+                if (!$search_found && stripos($inscription['suplentes'], $search) !== false) {
+                    $search_found = true;
+                }
+                
+                if ($search_found) {
                     $temp_filtered[] = $inscription;
                 }
             }
@@ -433,11 +541,15 @@ class LinmaniaBlogInscripciones {
     public function export_excel() {
         check_ajax_referer('linmania_nonce', 'nonce');
         
+        // Check if user has permission
+        if (!current_user_can('linmania_manage_inscriptions')) {
+            wp_die('No tienes permisos para exportar datos');
+        }
+        
         $filters = array(
             'search' => sanitize_text_field($_GET['search']),
             'categoria' => sanitize_text_field($_GET['categoria']),
             'local' => sanitize_text_field($_GET['local']),
-            'equipo' => sanitize_text_field($_GET['equipo']),
             'sort_by' => sanitize_text_field($_GET['sort_by']),
             'sort_order' => sanitize_text_field($_GET['sort_order'])
         );
@@ -448,6 +560,11 @@ class LinmaniaBlogInscripciones {
     
     public function ajax_get_filter_options() {
         check_ajax_referer('linmania_nonce', 'nonce');
+        
+        // Check if user has permission
+        if (!current_user_can('linmania_manage_inscriptions')) {
+            wp_send_json_error('No tienes permisos para acceder a esta información');
+        }
         
         // Usar exactamente la misma lógica que la tabla principal
         $args = array(
@@ -510,6 +627,11 @@ class LinmaniaBlogInscripciones {
     
     public function ajax_get_player_details() {
         check_ajax_referer('linmania_nonce', 'nonce');
+        
+        // Check if user has permission
+        if (!current_user_can('linmania_manage_inscriptions')) {
+            wp_send_json_error('No tienes permisos para acceder a esta información');
+        }
         
         $order_id = intval($_POST['order_id']);
         
@@ -594,11 +716,15 @@ class LinmaniaBlogInscripciones {
     public function export_pdf() {
         check_ajax_referer('linmania_nonce', 'nonce');
         
+        // Check if user has permission
+        if (!current_user_can('linmania_manage_inscriptions')) {
+            wp_die('No tienes permisos para exportar datos');
+        }
+        
         $filters = array(
             'search' => sanitize_text_field($_GET['search']),
             'categoria' => sanitize_text_field($_GET['categoria']),
             'local' => sanitize_text_field($_GET['local']),
-            'equipo' => sanitize_text_field($_GET['equipo']),
             'sort_by' => sanitize_text_field($_GET['sort_by']),
             'sort_order' => sanitize_text_field($_GET['sort_order'])
         );
@@ -897,7 +1023,135 @@ class LinmaniaBlogInscripciones {
             'message' => 'Pruebas de consulta completadas'
         ));
     }
+    
+    public function force_admin_redirect($redirect_to, $requested_redirect_to, $user) {
+        // Check if user has the inscription manager role
+        if (is_wp_error($user)) {
+            return $redirect_to;
+        }
+        
+        if (in_array('gestor_inscripciones', $user->roles)) {
+            // Force redirect to admin dashboard
+            return admin_url('admin.php?page=linmania-inscripciones');
+        }
+        
+        return $redirect_to;
+    }
+    
+    public function show_admin_bar_for_managers($show) {
+        if (is_user_logged_in()) {
+            $user = wp_get_current_user();
+            if (in_array('gestor_inscripciones', $user->roles)) {
+                return true;
+            }
+        }
+        return $show;
+    }
+    
+    public function force_admin_access() {
+        if (is_user_logged_in()) {
+            $user = wp_get_current_user();
+            if (in_array('gestor_inscripciones', $user->roles)) {
+                // Allow access to admin for inscription managers
+                if (!current_user_can('read')) {
+                    $user->add_cap('read');
+                }
+            }
+        }
+    }
 }
 
 // Initialize the plugin
 new LinmaniaBlogInscripciones();
+
+// Update role when plugin is activated
+register_activation_hook(__FILE__, 'linmania_update_role_on_activation');
+
+// Clean up when plugin is deactivated
+register_deactivation_hook(__FILE__, 'linmania_cleanup_on_deactivation');
+
+function linmania_update_role_on_activation() {
+    // Remove existing role if it exists
+    remove_role('gestor_inscripciones');
+    
+        // Create custom role for inscription management with minimal capabilities
+        $inscription_manager_caps = array(
+            'read' => true,
+            'linmania_manage_inscriptions' => true,
+            // Minimal admin access
+            'edit_posts' => true,
+        'edit_pages' => false,
+        'edit_others_posts' => false,
+        'edit_others_pages' => false,
+        'publish_posts' => false,
+        'publish_pages' => false,
+        'delete_posts' => false,
+        'delete_pages' => false,
+        'delete_others_posts' => false,
+        'delete_others_pages' => false,
+        'manage_categories' => false,
+        'manage_links' => false,
+        'moderate_comments' => false,
+        'upload_files' => false,
+        'edit_files' => false,
+        'edit_theme_options' => false,
+        'manage_options' => false,
+        'manage_plugins' => false,
+        'activate_plugins' => false,
+        'edit_plugins' => false,
+        'install_plugins' => false,
+        'update_plugins' => false,
+        'delete_plugins' => false,
+        'edit_themes' => false,
+        'install_themes' => false,
+        'update_themes' => false,
+        'delete_themes' => false,
+        'edit_users' => false,
+        'delete_users' => false,
+        'create_users' => false,
+        'list_users' => false,
+        'promote_users' => false,
+        'edit_others_users' => false,
+        'delete_others_users' => false,
+        // WooCommerce - only read access to orders
+        'manage_woocommerce' => false,
+        'view_woocommerce_reports' => false,
+        'edit_shop_orders' => false,
+        'delete_shop_orders' => false,
+        'edit_shop_coupons' => false,
+        'delete_shop_coupons' => false,
+        'edit_shop_webhooks' => false,
+        'delete_shop_webhooks' => false,
+        'manage_product_terms' => false,
+        'edit_product_terms' => false,
+        'delete_product_terms' => false,
+        'assign_product_terms' => false,
+        'edit_products' => false,
+        'delete_products' => false,
+        'publish_products' => false,
+        'edit_others_products' => false,
+        'delete_others_products' => false,
+        'read_private_products' => false,
+        'edit_private_products' => false,
+        'delete_private_products' => false,
+    );
+    
+    add_role('gestor_inscripciones', 'Gestor de Inscripciones', $inscription_manager_caps);
+    
+    // Add capability to administrators
+    $admin_role = get_role('administrator');
+    if ($admin_role) {
+        $admin_role->add_cap('linmania_manage_inscriptions');
+    }
+}
+
+function linmania_cleanup_on_deactivation() {
+    // Remove custom role
+    remove_role('gestor_inscripciones');
+    
+    // Remove capability from administrators
+    $admin_role = get_role('administrator');
+    if ($admin_role) {
+        $admin_role->remove_cap('linmania_manage_inscriptions');
+    }
+}

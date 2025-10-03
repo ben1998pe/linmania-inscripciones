@@ -1,0 +1,21 @@
+{
+    "name": "benjamin-oscco/linmania-blog-inscripciones",
+    "description": "Plugin de WordPress para gestión de inscripciones de torneos",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0+",
+    "authors": [
+        {
+            "name": "Benjamin Oscco Arias",
+            "email": "benjamin@example.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.4",
+        "dompdf/dompdf": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "LinmaniaPlugin\\": "includes/"
+        }
+    }
+}
