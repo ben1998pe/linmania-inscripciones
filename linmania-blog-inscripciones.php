@@ -101,16 +101,14 @@ class LinmaniaBlogInscripciones {
                 <div class="filter-group">
                     <label for="categoria-filter">CATEGORÍAS:</label>
                     <select id="categoria-filter">
-                        <option value="">Nothing selected</option>
-                        <option value="BULLSHOOTER">BULLSHOOTER</option>
-                        <option value="CONNECTION">CONNECTION</option>
+                        <option value="">Todas las categorías</option>
                     </select>
                 </div>
                 
                 <div class="filter-group">
                     <label for="local-filter">LOCAL:</label>
                     <select id="local-filter">
-                        <option value="">Nothing selected</option>
+                        <option value="">Todos los locales</option>
                     </select>
                 </div>
                 
@@ -195,12 +193,25 @@ class LinmaniaBlogInscripciones {
         
         $page = intval($_POST['page']) ?: 1;
         $per_page = intval($_POST['per_page']) ?: 25;
-        $search = sanitize_text_field($_POST['search']);
-        $categoria = sanitize_text_field($_POST['categoria']);
-        $local = sanitize_text_field($_POST['local']);
-        $equipo = sanitize_text_field($_POST['equipo']);
+        $search = sanitize_text_field($_POST['search']) ?: '';
+        $categoria = sanitize_text_field($_POST['categoria']) ?: '';
+        $local = sanitize_text_field($_POST['local']) ?: '';
+        $equipo = sanitize_text_field($_POST['equipo']) ?: '';
         $sort_by = sanitize_text_field($_POST['sort_by']) ?: 'ID';
         $sort_order = sanitize_text_field($_POST['sort_order']) ?: 'DESC';
+        
+        
+        // Limpiar filtros vacíos o con valores por defecto
+        if ($categoria === 'Nothing selected' || $categoria === '' || $categoria === 'Todas las categorías') {
+            $categoria = '';
+        }
+        if ($local === 'Nothing selected' || $local === '' || $local === 'Todos los locales') {
+            $local = '';
+        }
+        if ($equipo === 'Nothing selected' || $equipo === '') {
+            $equipo = '';
+        }
+        
         
         
         // Verificar que WooCommerce esté activo
@@ -243,44 +254,40 @@ class LinmaniaBlogInscripciones {
         }
         
         // Usar la consulta que sabemos que funciona: shop_order_placehold_any
+        // Si se filtra por categoría, necesitamos obtener todos los registros primero
+        $need_all_records = (!empty($categoria) && $categoria !== '' && $categoria !== 'Nothing selected');
+        
         $args = array(
             'post_type' => 'shop_order_placehold', // Solo el tipo que funciona
             'post_status' => 'any', // Usar 'any' para capturar todos los estados
-            'posts_per_page' => $per_page,
-            'paged' => $page,
+            'posts_per_page' => $need_all_records ? -1 : $per_page,
+            'paged' => $need_all_records ? 1 : $page,
             'orderby' => $this->get_orderby_field($sort_by),
             'order' => $sort_order
         );
         
-        // Aplicar filtros adicionales solo si no están vacíos
-        $additional_filters = array();
+        // Aplicar filtros de meta campos (local y equipo)
+        $meta_query = array();
         
-        if (!empty($categoria)) {
-            $additional_filters[] = array(
-                'key' => 'categoria_torneo',
-                'value' => $categoria,
-                'compare' => 'LIKE'
-            );
-        }
-        
-        if (!empty($local)) {
-            $additional_filters[] = array(
+        if (!empty($local) && $local !== '' && $local !== 'Nothing selected') {
+            $meta_query[] = array(
                 'key' => 'local',
                 'value' => $local,
                 'compare' => 'LIKE'
             );
         }
         
-        if (!empty($equipo)) {
-            $additional_filters[] = array(
+        if (!empty($equipo) && $equipo !== '' && $equipo !== 'Nothing selected') {
+            $meta_query[] = array(
                 'key' => 'nombre_equipo',
                 'value' => $equipo,
                 'compare' => 'LIKE'
             );
         }
         
+        // Búsqueda general en local y equipo
         if (!empty($search)) {
-            $additional_filters[] = array(
+            $meta_query[] = array(
                 'relation' => 'OR',
                 array(
                     'key' => 'nombre_equipo',
@@ -291,24 +298,24 @@ class LinmaniaBlogInscripciones {
                     'key' => 'local',
                     'value' => $search,
                     'compare' => 'LIKE'
-                ),
-                // La búsqueda de categorías ahora se hace en el frontend
-                // ya que las categorías vienen de los productos, no de meta campos
+                )
             );
         }
         
-        // Si hay filtros adicionales, los agregamos
-        if (!empty($additional_filters)) {
-            $args['meta_query'] = array(
-                'relation' => 'AND',
-                $additional_filters
-            );
+        // Si hay filtros de meta campos, los agregamos
+        if (!empty($meta_query)) {
+            if (count($meta_query) > 1) {
+                $meta_query['relation'] = 'AND';
+            }
+            $args['meta_query'] = $meta_query;
         }
         
         $query = new WP_Query($args);
         $inscriptions = array();
         
+        
         if ($query->have_posts()) {
+            $processed_count = 0;
             while ($query->have_posts()) {
                 $query->the_post();
                 $order_id = get_the_ID();
@@ -340,12 +347,12 @@ class LinmaniaBlogInscripciones {
                         }
                     }
                 }
-                $categoria = !empty($product_categories) ? implode(', ', array_unique($product_categories)) : 'Sin categoría';
+                $orden_categoria = !empty($product_categories) ? implode(', ', array_unique($product_categories)) : 'Sin categoría';
                 
                 $inscriptions[] = array(
                     'ID' => $order_id,
                     'date' => $formatted_date,
-                    'categoria' => $categoria,
+                    'categoria' => $orden_categoria,
                     'local' => $order->get_meta('local') ?: 'Sin local',
                     'equipo' => $order->get_meta('nombre_equipo') ?: ($customer_name ?: 'Sin equipo'),
                     'jugador1' => $order->get_meta('nombre_jugador_1') ?: '',
@@ -358,16 +365,40 @@ class LinmaniaBlogInscripciones {
                     'telefono4' => $order->get_meta('telefono_jugador_4') ?: '',
                     'suplentes' => $order->get_meta('suplentes') ?: ''
                 );
+                $processed_count++;
             }
         }
         
         wp_reset_postdata();
         
         
+        // Filtrar por categoría si es necesario (después de obtener los datos)
+        // Las categorías vienen de los productos, no de meta campos
+        $total_records = $query->found_posts;
+        $total_pages = $query->max_num_pages;
+        
+        if (!empty($categoria) && $categoria !== '' && $categoria !== 'Nothing selected' && $categoria !== 'Todas las categorías') {
+            $filtered_inscriptions = array();
+            foreach ($inscriptions as $inscription) {
+                // Usar stripos para búsqueda case-insensitive
+                if (stripos($inscription['categoria'], $categoria) !== false) {
+                    $filtered_inscriptions[] = $inscription;
+                }
+            }
+            
+            // Recalcular total y páginas después del filtro
+            $total_records = count($filtered_inscriptions);
+            $total_pages = ceil($total_records / $per_page);
+            
+            // Aplicar paginación manual
+            $offset = ($page - 1) * $per_page;
+            $inscriptions = array_slice($filtered_inscriptions, $offset, $per_page);
+        }
+        
         wp_send_json_success(array(
             'inscriptions' => $inscriptions,
-            'total' => $query->found_posts,
-            'pages' => $query->max_num_pages,
+            'total' => $total_records,
+            'pages' => $total_pages,
             'current_page' => $page,
             'debug' => array(
                 'query_args' => $args,

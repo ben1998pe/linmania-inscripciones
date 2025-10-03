@@ -99,3 +99,4 @@ GPL v2 o posterior - https://www.gnu.org/licenses/gpl-2.0.html
 - Modal de detalles de jugadores
 - Exportación a Excel y PDF
 - Integración completa con WooCommerce
+

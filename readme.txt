@@ -94,3 +94,4 @@ Primera versión del plugin. Instala para comenzar a gestionar inscripciones de 
 **Versión**: 1.0.0
 **Licencia**: GPL v2 o superior
 
+

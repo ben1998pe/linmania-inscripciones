@@ -17,144 +17,104 @@ jQuery(document).ready(function($) {
     loadFilterOptions();
     
     // Event listeners
+    $('#search-input').on('input', function() {
+        currentFilters.search = $(this).val();
+        currentPage = 1;
+        loadInscriptions();
+    });
+    
+    $('#categoria-filter').on('change', function() {
+        currentFilters.categoria = $(this).val();
+        currentPage = 1;
+        loadInscriptions();
+    });
+    
+    $('#local-filter').on('change', function() {
+        currentFilters.local = $(this).val();
+        currentPage = 1;
+        loadInscriptions();
+    });
+    
+    $('#equipo-filter').on('change', function() {
+        currentFilters.equipo = $(this).val();
+        currentPage = 1;
+        loadInscriptions();
+    });
+    
     $('#records-per-page').on('change', function() {
         perPage = parseInt($(this).val());
         currentPage = 1;
         loadInscriptions();
     });
     
-    $('#general-search').on('keyup', debounce(function() {
-        currentFilters.search = $(this).val();
-        currentPage = 1;
-        loadInscriptions();
-    }, 500));
-    
-    $('#categoria-filter, #local-filter, #equipo-filter').on('change keyup', function() {
-        const filterType = $(this).attr('id').replace('-filter', '');
-        currentFilters[filterType] = $(this).val();
-        currentPage = 1;
+    // Pagination
+    $(document).on('click', '.pagination a', function(e) {
+        e.preventDefault();
+        currentPage = parseInt($(this).data('page'));
         loadInscriptions();
     });
     
-    $('.sortable').on('click', function() {
+    // Sorting
+    $(document).on('click', 'th[data-sort]', function() {
         const sortField = $(this).data('sort');
-        
         if (currentSort === sortField) {
             currentSortOrder = currentSortOrder === 'ASC' ? 'DESC' : 'ASC';
         } else {
             currentSort = sortField;
-            currentSortOrder = 'DESC';
+            currentSortOrder = 'ASC';
         }
-        
-        // Update visual indicators
-        $('.sortable').removeClass('sort-asc sort-desc');
-        $(this).addClass(currentSortOrder === 'ASC' ? 'sort-asc' : 'sort-desc');
-        
-        currentPage = 1;
         loadInscriptions();
     });
     
-    // Expand/collapse functionality
-    $(document).on('click', '.expand-toggle', function() {
-        const row = $(this).closest('tr');
-        const detailsRow = row.next('.player-details');
-        
-        if (detailsRow.length) {
-            detailsRow.toggleClass('show');
-            $(this).text(detailsRow.hasClass('show') ? '−' : '+');
-            row.toggleClass('expanded');
-        } else {
-            // Load player details via AJAX
-            const orderId = row.data('order-id');
-            loadPlayerDetails(orderId, row);
-        }
-    });
-    
-    // Export functionality
+    // Export functions
     $('#export-excel').on('click', function(e) {
         e.preventDefault();
-        exportData('excel');
+        exportToExcel();
     });
     
     $('#export-pdf').on('click', function(e) {
         e.preventDefault();
-        exportData('pdf');
-    });
-    
-    // Test data functionality removed - no longer needed
-    
-    $('#debug-database').on('click', function(e) {
-        e.preventDefault();
-        debugDatabase();
-    });
-    
-    $('#test-orders').on('click', function(e) {
-        e.preventDefault();
-        testOrdersQuery();
-    });
-    
-    // Modal functionality
-    $('.close').on('click', function() {
-        $('#player-details-modal').hide();
-    });
-    
-    $(window).on('click', function(e) {
-        if ($(e.target).hasClass('linmania-modal')) {
-            $('#player-details-modal').hide();
-        }
+        exportToPDF();
     });
     
     // Functions
     function loadInscriptions() {
         showLoading();
         
+        const data = {
+            action: 'linmania_get_inscriptions',
+            nonce: linmania_ajax.nonce,
+            page: currentPage,
+            per_page: perPage,
+            search: currentFilters.search,
+            categoria: currentFilters.categoria,
+            local: currentFilters.local,
+            equipo: currentFilters.equipo,
+            sort_by: currentSort,
+            sort_order: currentSortOrder
+        };
+        
         $.ajax({
             url: linmania_ajax.ajax_url,
             type: 'POST',
-            data: {
-                action: 'linmania_get_inscriptions',
-                nonce: linmania_ajax.nonce,
-                page: currentPage,
-                per_page: perPage,
-                search: currentFilters.search,
-                categoria: currentFilters.categoria,
-                local: currentFilters.local,
-                equipo: currentFilters.equipo,
-                sort_by: currentSort,
-                sort_order: currentSortOrder
-            },
+            data: data,
             success: function(response) {
-                console.log('Response received:', response);
-                
                 if (response.success) {
                     renderTable(response.data.inscriptions);
-                    renderPagination(response.data);
-                    
-                    // Mostrar información de debug en consola
-                    if (response.data.debug) {
-                        console.log('Debug info:', response.data.debug);
-                    }
+                    updatePagination(response.data);
                 } else {
-                    console.error('Error response:', response);
-                    showError('Error al cargar las inscripciones: ' + (response.data || 'Error desconocido'));
+                    showError('Error al cargar las inscripciones: ' + response.data);
                 }
+                hideLoading();
             },
-            error: function(xhr, status, error) {
-                console.error('AJAX Error:', {
-                    status: status,
-                    error: error,
-                    responseText: xhr.responseText
-                });
-                showError('Error de conexión: ' + error);
-            },
-            complete: function() {
+            error: function() {
+                showError('Error de conexión al cargar las inscripciones');
                 hideLoading();
             }
         });
     }
     
     function loadFilterOptions() {
-        // Load unique values for filters
         $.ajax({
             url: linmania_ajax.ajax_url,
             type: 'POST',
@@ -163,34 +123,26 @@ jQuery(document).ready(function($) {
                 nonce: linmania_ajax.nonce
             },
             success: function(response) {
-                console.log('Filter options response:', response);
                 if (response.success) {
                     populateFilterOptions(response.data);
-                } else {
-                    console.error('Error loading filter options:', response.data);
                 }
-            },
-            error: function(xhr, status, error) {
-                console.error('AJAX error loading filter options:', error);
             }
         });
     }
     
     function populateFilterOptions(data) {
-        console.log('Filter options data:', data);
-        
         // Populate local filter
         const localSelect = $('#local-filter');
-        localSelect.empty().append('<option value="">Nothing selected</option>');
+        localSelect.empty().append('<option value="">Todos los locales</option>');
         if (data.locales && data.locales.length > 0) {
             data.locales.forEach(function(local) {
                 localSelect.append(`<option value="${local}">${local}</option>`);
             });
         }
-        
+
         // Populate categoria filter
         const categoriaSelect = $('#categoria-filter');
-        categoriaSelect.empty().append('<option value="">Nothing selected</option>');
+        categoriaSelect.empty().append('<option value="">Todas las categorías</option>');
         if (data.categorias && data.categorias.length > 0) {
             data.categorias.forEach(function(categoria) {
                 categoriaSelect.append(`<option value="${categoria}">${categoria}</option>`);
@@ -199,25 +151,19 @@ jQuery(document).ready(function($) {
     }
     
     function renderTable(inscriptions) {
-        const tbody = $('#inscriptions-tbody');
+        const tbody = $('#inscriptions-table tbody');
         tbody.empty();
         
         if (inscriptions.length === 0) {
-            tbody.append(`
-                <tr>
-                    <td colspan="5" class="linmania-loading">
-                        No se encontraron inscripciones
-                    </td>
-                </tr>
-            `);
+            tbody.append('<tr><td colspan="6" class="text-center">No se encontraron inscripciones</td></tr>');
             return;
         }
         
         inscriptions.forEach(function(inscription) {
             const row = $(`
-                <tr data-order-id="${inscription.ID}">
+                <tr>
                     <td>
-                        <button class="expand-toggle">+</button>
+                        <button class="expand-toggle" data-order-id="${inscription.ID}">+</button>
                     </td>
                     <td>${inscription.ID}</td>
                     <td>${inscription.date}</td>
@@ -226,12 +172,113 @@ jQuery(document).ready(function($) {
                     <td>${inscription.equipo}</td>
                 </tr>
             `);
-            
             tbody.append(row);
         });
     }
     
-    function loadPlayerDetails(orderId, row) {
+    function updatePagination(data) {
+        const paginationInfo = $('#pagination-info');
+        const startRecord = (data.current_page - 1) * perPage + 1;
+        const endRecord = Math.min(data.current_page * perPage, data.total);
+        
+        paginationInfo.text(`Mostrando registros del ${startRecord} al ${endRecord} de un total de ${data.total} registros`);
+        
+        // Update pagination buttons
+        const pagination = $('#pagination');
+        pagination.empty();
+        
+        if (data.pages > 1) {
+            // Previous button
+            if (data.current_page > 1) {
+                pagination.append(`<a href="#" class="button" data-page="${data.current_page - 1}">« Anterior</a>`);
+            }
+            
+            // Page numbers
+            for (let i = 1; i <= data.pages; i++) {
+                const activeClass = i === data.current_page ? 'button-primary' : 'button';
+                pagination.append(`<a href="#" class="${activeClass}" data-page="${i}">${i}</a>`);
+            }
+            
+            // Next button
+            if (data.current_page < data.pages) {
+                pagination.append(`<a href="#" class="button" data-page="${data.current_page + 1}">Siguiente »</a>`);
+            }
+        }
+    }
+    
+    function showPlayerDetailsModal(orderId, inscription) {
+        const modal = $(`
+            <div class="linmania-modal" id="player-modal-${orderId}">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Detalles del Equipo - Orden #${orderId}</h3>
+                        <span class="close-modal">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div class="players-grid-modal">
+                            <div class="player-field-modal">
+                                <label>Jugador 1:</label>
+                                <span>${inscription.jugador1 || 'No especificado'}</span>
+                            </div>
+                            <div class="player-field-modal">
+                                <label>Teléfono 1:</label>
+                                <span>${inscription.telefono1 || 'No especificado'}</span>
+                            </div>
+                            <div class="player-field-modal">
+                                <label>Jugador 2:</label>
+                                <span>${inscription.jugador2 || 'No especificado'}</span>
+                            </div>
+                            <div class="player-field-modal">
+                                <label>Teléfono 2:</label>
+                                <span>${inscription.telefono2 || 'No especificado'}</span>
+                            </div>
+                            <div class="player-field-modal">
+                                <label>Jugador 3:</label>
+                                <span>${inscription.jugador3 || 'No especificado'}</span>
+                            </div>
+                            <div class="player-field-modal">
+                                <label>Teléfono 3:</label>
+                                <span>${inscription.telefono3 || 'No especificado'}</span>
+                            </div>
+                            <div class="player-field-modal">
+                                <label>Jugador 4:</label>
+                                <span>${inscription.jugador4 || 'No especificado'}</span>
+                            </div>
+                            <div class="player-field-modal">
+                                <label>Teléfono 4:</label>
+                                <span>${inscription.telefono4 || 'No especificado'}</span>
+                            </div>
+                        </div>
+                        <div class="suplentes-field-modal">
+                            <label>Suplentes:</label>
+                            <span>${inscription.suplentes || 'No especificado'}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+        $('body').append(modal);
+        modal.show();
+        
+        // Close modal events
+        modal.find('.close-modal').on('click', function() {
+            modal.remove();
+        });
+        
+        modal.on('click', function(e) {
+            if (e.target === modal[0]) {
+                modal.remove();
+            }
+        });
+    }
+    
+    // Handle expand/collapse for player details
+    $(document).on('click', '.expand-toggle', function() {
+        const orderId = $(this).data('order-id');
+        const button = $(this);
+        
+        // Get inscription data from the current page data
         $.ajax({
             url: linmania_ajax.ajax_url,
             type: 'POST',
@@ -242,298 +289,34 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
-                    showPlayerDetailsModal(response.data, orderId);
+                    showPlayerDetailsModal(orderId, response.data);
                 } else {
-                    console.error('Error al cargar detalles:', response.data);
-                    alert('Error al cargar los detalles de los jugadores');
+                    alert('Error al cargar los detalles del equipo');
                 }
+            },
+            error: function() {
+                alert('Error de conexión al cargar los detalles del equipo');
             }
         });
+    });
+    
+    function exportToExcel() {
+        window.location.href = linmania_ajax.ajax_url + '?action=linmania_export_excel&nonce=' + linmania_ajax.nonce;
     }
     
-    function showPlayerDetailsModal(playerData, orderId) {
-        // Crear el modal
-        const modal = $(`
-            <div class="linmania-modal" id="player-details-modal">
-                <div class="modal-content">
-                    <span class="close">&times;</span>
-                    <h2>Detalles de Jugadores - Orden #${orderId}</h2>
-                    <div class="players-grid-modal">
-                        <div class="player-field-modal">
-                            <label>Jugador 1:</label>
-                            <span>${playerData.jugador1 || 'No especificado'}</span>
-                            ${playerData.telefono1 ? `<br><small>Tel: ${playerData.telefono1}</small>` : ''}
-                        </div>
-                        <div class="player-field-modal">
-                            <label>Jugador 2:</label>
-                            <span>${playerData.jugador2 || 'No especificado'}</span>
-                            ${playerData.telefono2 ? `<br><small>Tel: ${playerData.telefono2}</small>` : ''}
-                        </div>
-                        <div class="player-field-modal">
-                            <label>Jugador 3:</label>
-                            <span>${playerData.jugador3 || 'No especificado'}</span>
-                            ${playerData.telefono3 ? `<br><small>Tel: ${playerData.telefono3}</small>` : ''}
-                        </div>
-                        <div class="player-field-modal">
-                            <label>Jugador 4:</label>
-                            <span>${playerData.jugador4 || 'No especificado'}</span>
-                            ${playerData.telefono4 ? `<br><small>Tel: ${playerData.telefono4}</small>` : ''}
-                        </div>
-                    </div>
-                    <div class="suplentes-field-modal">
-                        <label>Suplentes:</label>
-                        <span>${playerData.suplentes || 'No especificados'}</span>
-                    </div>
-                </div>
-            </div>
-        `);
-        
-        // Agregar el modal al body
-        $('body').append(modal);
-        
-        // Mostrar el modal
-        modal.fadeIn(300);
-        
-        // Eventos para cerrar el modal
-        $('.close, .linmania-modal').on('click', function(e) {
-            if (e.target === this) {
-                modal.fadeOut(300, function() {
-                    modal.remove();
-                });
-            }
-        });
-        
-        // Cerrar con tecla ESC
-        $(document).on('keydown.modal', function(e) {
-            if (e.keyCode === 27) { // ESC
-                modal.fadeOut(300, function() {
-                    modal.remove();
-                });
-                $(document).off('keydown.modal');
-            }
-        });
-    }
-    
-    function renderPagination(data) {
-        const total = data.total;
-        const pages = data.pages;
-        const current = data.current_page;
-        
-        // Update pagination info
-        const start = (current - 1) * perPage + 1;
-        const end = Math.min(current * perPage, total);
-        $('#pagination-info').text(`Mostrando registros del ${start} al ${end} de un total de ${total} registros`);
-        
-        // Render pagination links
-        const paginationLinks = $('#pagination-links');
-        paginationLinks.empty();
-        
-        if (pages <= 1) return;
-        
-        // Previous button
-        if (current > 1) {
-            paginationLinks.append(`<a href="#" class="prev-page" data-page="${current - 1}">« Anterior</a>`);
-        } else {
-            paginationLinks.append('<span class="disabled">« Anterior</span>');
-        }
-        
-        // Page numbers
-        const startPage = Math.max(1, current - 2);
-        const endPage = Math.min(pages, current + 2);
-        
-        if (startPage > 1) {
-            paginationLinks.append('<a href="#" class="page-link" data-page="1">1</a>');
-            if (startPage > 2) {
-                paginationLinks.append('<span class="disabled">...</span>');
-            }
-        }
-        
-        for (let i = startPage; i <= endPage; i++) {
-            if (i === current) {
-                paginationLinks.append(`<span class="current">${i}</span>`);
-            } else {
-                paginationLinks.append(`<a href="#" class="page-link" data-page="${i}">${i}</a>`);
-            }
-        }
-        
-        if (endPage < pages) {
-            if (endPage < pages - 1) {
-                paginationLinks.append('<span class="disabled">...</span>');
-            }
-            paginationLinks.append(`<a href="#" class="page-link" data-page="${pages}">${pages}</a>`);
-        }
-        
-        // Next button
-        if (current < pages) {
-            paginationLinks.append(`<a href="#" class="next-page" data-page="${current + 1}">Siguiente »</a>`);
-        } else {
-            paginationLinks.append('<span class="disabled">Siguiente »</span>');
-        }
-        
-        // Add click handlers
-        paginationLinks.find('.page-link, .prev-page, .next-page').on('click', function(e) {
-            e.preventDefault();
-            currentPage = parseInt($(this).data('page'));
-            loadInscriptions();
-        });
-    }
-    
-    function exportData(format) {
-        const params = new URLSearchParams({
-            action: `linmania_export_${format}`,
-            nonce: linmania_ajax.nonce,
-            search: currentFilters.search,
-            categoria: currentFilters.categoria,
-            local: currentFilters.local,
-            equipo: currentFilters.equipo,
-            sort_by: currentSort,
-            sort_order: currentSortOrder
-        });
-        
-        window.open(`${linmania_ajax.ajax_url}?${params.toString()}`, '_blank');
+    function exportToPDF() {
+        window.location.href = linmania_ajax.ajax_url + '?action=linmania_export_pdf&nonce=' + linmania_ajax.nonce;
     }
     
     function showLoading() {
-        $('#inscriptions-tbody').html(`
-            <tr>
-                <td colspan="6" class="linmania-loading">
-                    Cargando inscripciones...
-                </td>
-            </tr>
-        `);
+        $('#inscriptions-table tbody').html('<tr><td colspan="6" class="text-center">Cargando...</td></tr>');
     }
     
     function hideLoading() {
-        // Loading is replaced by actual data
+        // Loading is hidden when table is rendered
     }
     
     function showError(message) {
-        $('#inscriptions-tbody').html(`
-            <tr>
-                <td colspan="6" style="text-align: center; color: #d63638; padding: 20px;">
-                    ${message}
-                </td>
-            </tr>
-        `);
-    }
-    
-    // Test data functions removed - no longer needed
-    
-    function debugDatabase() {
-        const button = $('#debug-database');
-        const status = $('#test-data-status');
-        
-        button.prop('disabled', true).text('Analizando...');
-        status.text('Analizando base de datos...');
-        
-        $.ajax({
-            url: linmania_ajax.ajax_url,
-            type: 'POST',
-            data: {
-                action: 'linmania_debug_database',
-                nonce: linmania_ajax.nonce
-            },
-            success: function(response) {
-                console.log('Database debug response:', response);
-                
-                if (response.success) {
-                    const data = response.data;
-                    let message = `WordPress: ${data.wp_info.wp_version} | PHP: ${data.wp_info.php_version} | MySQL: ${data.wp_info.mysql_version} | `;
-                    message += `WooCommerce: ${data.wc_info.wc_active ? data.wc_info.wc_version : 'No activo'} | `;
-                    message += `Órdenes encontradas: ${data.total_shop_orders}`;
-                    
-                    status.text(message).css('color', 'blue');
-                    
-                    // Mostrar información detallada en consola
-                    console.log('=== DEBUG DE BASE DE DATOS ===');
-                    console.log('Información WordPress:', data.wp_info);
-                    console.log('Información WooCommerce:', data.wc_info);
-                    console.log('Tablas:', data.tables);
-                    console.log('Tipos de posts:', data.post_types);
-                    console.log('Órdenes de WooCommerce:', data.shop_orders);
-                    console.log('Estados de órdenes:', data.order_statuses);
-                    console.log('Meta campos de órdenes:', data.order_meta);
-                } else {
-                    status.text('Error en debug: ' + (response.data || 'Error desconocido')).css('color', 'red');
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Debug error:', error);
-                status.text('Error de conexión: ' + error).css('color', 'red');
-            },
-            complete: function() {
-                button.prop('disabled', false).text('Debug Base de Datos');
-            }
-        });
-    }
-    
-    function testOrdersQuery() {
-        const button = $('#test-orders');
-        const status = $('#test-data-status');
-        
-        button.prop('disabled', true).text('Probando...');
-        status.text('Probando diferentes consultas de órdenes...');
-        
-        $.ajax({
-            url: linmania_ajax.ajax_url,
-            type: 'POST',
-            data: {
-                action: 'linmania_test_orders',
-                nonce: linmania_ajax.nonce
-            },
-            success: function(response) {
-                console.log('Test orders response:', response);
-                
-                if (response.success) {
-                    const data = response.data;
-                    let message = 'Pruebas de consulta completadas - Ver consola para detalles';
-                    
-                    status.text(message).css('color', 'blue');
-                    
-                    // Mostrar información detallada en consola
-                    console.log('=== PRUEBAS DE CONSULTA DE ÓRDENES ===');
-                    console.log('Resultados de consultas:', data.test_queries);
-                    
-                    // Buscar la consulta que funciona
-                    let workingQuery = null;
-                    for (const [queryName, result] of Object.entries(data.test_queries)) {
-                        if (result.found_posts > 0 || result.count > 0) {
-                            workingQuery = queryName;
-                            console.log(`✅ Consulta que funciona: ${queryName}`, result);
-                            break;
-                        }
-                    }
-                    
-                    if (workingQuery) {
-                        console.log(`🎯 Usar esta consulta: ${workingQuery}`);
-                        status.text(`Consulta que funciona encontrada: ${workingQuery}`).css('color', 'green');
-                    } else {
-                        console.log('❌ Ninguna consulta encontró órdenes');
-                        status.text('Ninguna consulta encontró órdenes').css('color', 'red');
-                    }
-                } else {
-                    status.text('Error en prueba: ' + (response.data || 'Error desconocido')).css('color', 'red');
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Test orders error:', error);
-                status.text('Error de conexión: ' + error).css('color', 'red');
-            },
-            complete: function() {
-                button.prop('disabled', false).text('Probar Consulta de Órdenes');
-            }
-        });
-    }
-    
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
+        $('#inscriptions-table tbody').html(`<tr><td colspan="6" class="text-center error">${message}</td></tr>`);
     }
 });
