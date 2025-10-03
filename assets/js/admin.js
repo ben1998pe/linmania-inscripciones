@@ -94,6 +94,7 @@ jQuery(document).ready(function($) {
             sort_order: currentSortOrder
         };
         
+        
         $.ajax({
             url: linmania_ajax.ajax_url,
             type: 'POST',

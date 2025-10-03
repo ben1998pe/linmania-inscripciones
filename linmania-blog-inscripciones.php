@@ -201,6 +201,7 @@ class LinmaniaBlogInscripciones {
         $sort_order = sanitize_text_field($_POST['sort_order']) ?: 'DESC';
         
         
+        
         // Limpiar filtros vacíos o con valores por defecto
         if ($categoria === 'Nothing selected' || $categoria === '' || $categoria === 'Todas las categorías') {
             $categoria = '';
@@ -211,6 +212,7 @@ class LinmaniaBlogInscripciones {
         if ($equipo === 'Nothing selected' || $equipo === '') {
             $equipo = '';
         }
+        
         
         
         
@@ -266,52 +268,12 @@ class LinmaniaBlogInscripciones {
             'order' => $sort_order
         );
         
-        // Aplicar filtros de meta campos (local y equipo)
-        $meta_query = array();
-        
-        if (!empty($local) && $local !== '' && $local !== 'Nothing selected') {
-            $meta_query[] = array(
-                'key' => 'local',
-                'value' => $local,
-                'compare' => 'LIKE'
-            );
-        }
-        
-        if (!empty($equipo) && $equipo !== '' && $equipo !== 'Nothing selected') {
-            $meta_query[] = array(
-                'key' => 'nombre_equipo',
-                'value' => $equipo,
-                'compare' => 'LIKE'
-            );
-        }
-        
-        // Búsqueda general en local y equipo
-        if (!empty($search)) {
-            $meta_query[] = array(
-                'relation' => 'OR',
-                array(
-                    'key' => 'nombre_equipo',
-                    'value' => $search,
-                    'compare' => 'LIKE'
-                ),
-                array(
-                    'key' => 'local',
-                    'value' => $search,
-                    'compare' => 'LIKE'
-                )
-            );
-        }
-        
-        // Si hay filtros de meta campos, los agregamos
-        if (!empty($meta_query)) {
-            if (count($meta_query) > 1) {
-                $meta_query['relation'] = 'AND';
-            }
-            $args['meta_query'] = $meta_query;
-        }
+        // Obtener todas las órdenes y filtrar después
+        // Esto evita problemas con meta_query
         
         $query = new WP_Query($args);
         $inscriptions = array();
+        
         
         
         if ($query->have_posts()) {
@@ -349,11 +311,13 @@ class LinmaniaBlogInscripciones {
                 }
                 $orden_categoria = !empty($product_categories) ? implode(', ', array_unique($product_categories)) : 'Sin categoría';
                 
+                $local_value = $order->get_meta('local') ?: 'Sin local';
+                
                 $inscriptions[] = array(
                     'ID' => $order_id,
                     'date' => $formatted_date,
                     'categoria' => $orden_categoria,
-                    'local' => $order->get_meta('local') ?: 'Sin local',
+                    'local' => $local_value,
                     'equipo' => $order->get_meta('nombre_equipo') ?: ($customer_name ?: 'Sin equipo'),
                     'jugador1' => $order->get_meta('nombre_jugador_1') ?: '',
                     'jugador2' => $order->get_meta('nombre_jugador_2') ?: '',
@@ -372,28 +336,54 @@ class LinmaniaBlogInscripciones {
         wp_reset_postdata();
         
         
-        // Filtrar por categoría si es necesario (después de obtener los datos)
-        // Las categorías vienen de los productos, no de meta campos
+        // Filtrar por categoría, local y equipo después de obtener los datos
         $total_records = $query->found_posts;
         $total_pages = $query->max_num_pages;
         
+        // Aplicar filtros después de obtener los datos
+        $filtered_inscriptions = $inscriptions;
+        
+        // Filtro de categoría
         if (!empty($categoria) && $categoria !== '' && $categoria !== 'Nothing selected' && $categoria !== 'Todas las categorías') {
-            $filtered_inscriptions = array();
-            foreach ($inscriptions as $inscription) {
-                // Usar stripos para búsqueda case-insensitive
+            $temp_filtered = array();
+            foreach ($filtered_inscriptions as $inscription) {
                 if (stripos($inscription['categoria'], $categoria) !== false) {
-                    $filtered_inscriptions[] = $inscription;
+                    $temp_filtered[] = $inscription;
                 }
             }
-            
-            // Recalcular total y páginas después del filtro
-            $total_records = count($filtered_inscriptions);
-            $total_pages = ceil($total_records / $per_page);
-            
-            // Aplicar paginación manual
-            $offset = ($page - 1) * $per_page;
-            $inscriptions = array_slice($filtered_inscriptions, $offset, $per_page);
+            $filtered_inscriptions = $temp_filtered;
         }
+        
+        // Filtro de local
+        if (!empty($local) && $local !== '' && $local !== 'Nothing selected' && $local !== 'Todos los locales') {
+            $temp_filtered = array();
+            foreach ($filtered_inscriptions as $inscription) {
+                if (stripos($inscription['local'], $local) !== false) {
+                    $temp_filtered[] = $inscription;
+                }
+            }
+            $filtered_inscriptions = $temp_filtered;
+        }
+        
+        // Filtro de equipo
+        if (!empty($equipo) && $equipo !== '' && $equipo !== 'Nothing selected') {
+            $temp_filtered = array();
+            foreach ($filtered_inscriptions as $inscription) {
+                if (stripos($inscription['equipo'], $equipo) !== false) {
+                    $temp_filtered[] = $inscription;
+                }
+            }
+            $filtered_inscriptions = $temp_filtered;
+        }
+        
+        // Recalcular total y páginas después del filtro
+        $total_records = count($filtered_inscriptions);
+        $total_pages = ceil($total_records / $per_page);
+        
+        // Aplicar paginación manual
+        $offset = ($page - 1) * $per_page;
+        $inscriptions = array_slice($filtered_inscriptions, $offset, $per_page);
+        
         
         wp_send_json_success(array(
             'inscriptions' => $inscriptions,
